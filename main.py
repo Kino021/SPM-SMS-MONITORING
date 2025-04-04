@@ -73,13 +73,13 @@ def to_excel_single(df, sheet_name):
 
 # Function to process data and create summary
 def create_sms_summary(df):
-    # Required columns
+    # Required columns with corrected names
     required_columns = {
         'date_col': 'Submission Date / Time',
-        'env_col': 'ENVIRONMENT',
-        'client_col': 'CLIENT',
-        'account_col': 'ACCOUNT NO.',
-        'status_col': 'STATUS'
+        'env_col': 'Environment',
+        'client_col': 'Client',
+        'account_col': 'Account No.',
+        'status_col': 'Remark'  # Assuming 'Remark' contains the status
     }
     
     # Check if all required columns exist
@@ -103,16 +103,27 @@ def create_sms_summary(df):
     df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
     
     # Create summary DataFrame
-    summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).agg({
+    summary = df_processed.groupby(['DATE', 'CLIENT', 'ENVIRONMENT']).agg({
         'ACCOUNT': 'nunique',  # Count unique accounts
         'STATUS': [
-            lambda x: (x.str.upper() == 'DELIVERED').sum(),  # SMS Sent
-            lambda x: (x.str.upper() == 'FAILED').sum()      # SMS Not Sent
+            lambda x: (x.str.upper() == 'DELIVERED').sum(),  # Total SMS Sent
+            lambda x: (x.str.upper() == 'FAILED').sum()      # Total SMS Not Sent
         ]
     }).reset_index()
     
     # Rename columns
-    summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT', 'SMS NOT SENT']
+    summary.columns = ['DATE', 'CLIENT', 'ENVIRONMENT', 'TOTAL ACCOUNTS', 'TOTAL SMS SENT', 'TOTAL SMS NOT SENT']
+    
+    # Calculate averages
+    # Average SMS Sent per day per client
+    summary['AVG SMS SENT'] = (summary['TOTAL SMS SENT'] / summary.groupby(['CLIENT', 'ENVIRONMENT'])['DATE'].transform('nunique')).round(2)
+    # Average Accounts per day per client
+    summary['AVG ACCOUNTS'] = (summary['TOTAL ACCOUNTS'] / summary.groupby(['CLIENT', 'ENVIRONMENT'])['DATE'].transform('nunique')).round(2)
+    # Average SMS Not Sent per day per client
+    summary['AVG SMS NOT SENT'] = (summary['TOTAL SMS NOT SENT'] / summary.groupby(['CLIENT', 'ENVIRONMENT'])['DATE'].transform('nunique')).round(2)
+    
+    # Sort by date and client
+    summary = summary.sort_values(['DATE', 'CLIENT'])
     
     return summary
 
@@ -129,7 +140,7 @@ if uploaded_file is not None:
     
     if summary_df is not None:
         # Display the summary
-        st.subheader("SMS Summary per Client per Day")
+        st.subheader("Summary Report Per Client and Date")
         st.dataframe(summary_df)
         
         # Download button for summary
@@ -137,7 +148,7 @@ if uploaded_file is not None:
         st.download_button(
             label="Download SMS Summary",
             data=excel_data,
-            file_name="sms_summary_per_client_per_day.xlsx",
+            file_name="sms_summary_per_client_per_date.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     
