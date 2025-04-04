@@ -25,7 +25,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title('SPM MONITORING ALL ENVI')
+st.title('SPM SMS MONITORING ALL ENVI')
 
 @st.cache_data
 def load_data(uploaded_file):
