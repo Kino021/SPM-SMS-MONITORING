@@ -4,20 +4,30 @@ from io import BytesIO
 
 st.set_page_config(layout="wide", page_title="DIALER PRODUCTIVITY PER CRITERIA OF BALANCE", page_icon="📊", initial_sidebar_state="expanded")
 
-# Apply dark mode and custom header styling
+# Apply dark mode and custom styling for wider display
 st.markdown(
     """
     <style>
     .reportview-container {
         background: #2E2E2E;
         color: white;
+        max-width: 100%;
+        padding: 1rem;
     }
     .sidebar .sidebar-content {
         background: #2E2E2E;
+        width: 300px;
     }
     h1, h2, h3 {
         color: #87CEEB !important;
         font-weight: bold !important;
+    }
+    .stDataFrame {
+        width: 100% !important;
+        font-size: 14px;
+    }
+    .stExpander {
+        width: 100%;
     }
     </style>
     """,
@@ -133,9 +143,9 @@ if uploaded_file is not None:
     summary_df = create_sms_summary(df)
     
     if summary_df is not None:
-        # Display the summary
+        # Display the summary in a wide layout
         st.subheader("SMS Summary per Client per Day")
-        st.dataframe(summary_df)
+        st.dataframe(summary_df, use_container_width=True)  # Use full container width
         
         # Download button for summary
         excel_data = to_excel_single(summary_df, "SMS_Summary")
@@ -146,6 +156,6 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     
-    # Display raw data (optional)
+    # Display raw data in a wide layout (optional)
     with st.expander("View Raw Data"):
-        st.dataframe(df)
+        st.dataframe(df, use_container_width=True)  # Use full container width
