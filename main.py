@@ -124,7 +124,7 @@ def create_sms_summaries(df):
     }).reset_index()
     
     # Rename columns
-    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'SMS SENT', 'SMS NOT SENT']
+    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'DELIVERED', 'FAILED']
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
     # Overall Summary with Date Range
@@ -141,7 +141,7 @@ def create_sms_summaries(df):
     }).reset_index()
     
     # Rename columns and add date range
-    overall_summary.columns = ['ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'SMS SENT', 'SMS NOT SENT']
+    overall_summary.columns = ['ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'DELIVERED', 'FAILED']
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
     overall_summary = overall_summary.sort_values(['CLIENT'])
     
