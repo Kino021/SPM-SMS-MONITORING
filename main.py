@@ -36,13 +36,12 @@ def load_data(uploaded_file):
 def to_excel_single(df, sheet_name):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Format dates properly before writing if 'Date' column exists
         df_copy = df.copy()
-        if 'Date' in df_copy.columns:
-            if pd.api.types.is_datetime64_any_dtype(df_copy['Date']):
-                df_copy['Date'] = df_copy['Date'].dt.strftime('%d-%m-%Y')
-            elif pd.api.types.is_object_dtype(df_copy['Date']):
-                df_copy['Date'] = pd.to_datetime(df_copy['Date'], errors='coerce').dt.strftime('%d-%m-%Y')
+        if 'DATE' in df_copy.columns:
+            if pd.api.types.is_datetime64_any_dtype(df_copy['DATE']):
+                df_copy['DATE'] = df_copy['DATE'].dt.strftime('%d-%m-%Y')
+            elif pd.api.types.is_object_dtype(df_copy['DATE']):
+                df_copy['DATE'] = pd.to_datetime(df_copy['DATE'], errors='coerce').dt.strftime('%d-%m-%Y')
         df_copy.to_excel(writer, index=False, sheet_name=sheet_name)
         
         workbook = writer.book
@@ -73,50 +72,49 @@ def to_excel_single(df, sheet_name):
     
     return output.getvalue()
 
-# Function to combine all DataFrames into one Excel file
-def to_excel_all(dfs, sheet_names):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        for df, sheet_name in zip(dfs, sheet_names):
-            df_copy = df.copy()
-            if 'Date' in df_copy.columns:
-                if pd.api.types.is_datetime64_any_dtype(df_copy['Date']):
-                    df_copy['Date'] = df_copy['Date'].dt.strftime('%d-%m-%Y')
-                elif pd.api.types.is_object_dtype(df_copy['Date']):
-                    df_copy['Date'] = pd.to_datetime(df_copy['Date'], errors='coerce').dt.strftime('%d-%m-%Y')
-            df_copy.to_excel(writer, index=False, sheet_name=sheet_name)
-            
-            workbook = writer.book
-            worksheet = writer.sheets[sheet_name]
-            
-            header_format = workbook.add_format({
-                'bold': True,
-                'bg_color': '#87CEEB',
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-            cell_format = workbook.add_format({'border': 1})
-            
-            for col_num, value in enumerate(df_copy.columns.values):
-                worksheet.write(0, col_num, value, header_format)
-            
-            for row_num in range(1, len(df_copy) + 1):
-                for col_num in range(len(df_copy.columns)):
-                    worksheet.write(row_num, col_num, df_copy.iloc[row_num-1, col_num], cell_format)
-            
-            for i, col in enumerate(df_copy.columns):
-                max_length = max(
-                    df_copy[col].astype(str).map(len).max(),
-                    len(str(col))
-                )
-                worksheet.set_column(i, i, max_length + 2)
+# Function to process data and create summary
+def create_sms_summary(df):
+    # Convert Submission Date / Time to date only
+    df['Submission Date / Time'] = pd.to_datetime(df['Submission Date / Time']).dt.date
     
-    return output.getvalue()
+    # Create summary DataFrame
+    summary = df.groupby(['Submission Date / Time', 'ENVIRONMENT', 'CLIENT']).agg({
+        'ACCOUNT NO.': 'nunique',  # Count unique accounts
+        'STATUS': [
+            lambda x: (x.str.upper() == 'DELIVERED').sum(),  # SMS Sent
+            lambda x: (x.str.upper() == 'FAILED').sum()      # SMS Not Sent
+        ]
+    }).reset_index()
+    
+    # Rename columns
+    summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT', 'SMS NOT SENT']
+    
+    return summary
 
 with st.sidebar:
     st.subheader("Upload File")
     uploaded_file = st.file_uploader("Choose an Excel file", type=['xlsx'])
 
 if uploaded_file is not None:
+    # Load and process data
     df = load_data(uploaded_file)
+    
+    # Create SMS summary
+    summary_df = create_sms_summary(df)
+    
+    # Display the summary
+    st.subheader("SMS Summary per Client per Day")
+    st.dataframe(summary_df)
+    
+    # Download button for summary
+    excel_data = to_excel_single(summary_df, "SMS_Summary")
+    st.download_button(
+        label="Download SMS Summary",
+        data=excel_data,
+        file_name="sms_summary_per_client_per_day.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    
+    # Display raw data (optional)
+    with st.expander("View Raw Data"):
+        st.dataframe(df)
