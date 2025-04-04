@@ -90,7 +90,6 @@ def create_sms_summaries(df):
         'date_col': 'Submission Date / Time',
         'env_col': 'Environment',
         'client_col': 'Client',
-        'account_col': 'Account No.',
         'status_col': 'SMS Status Response Date/Time',
         'phone_col': 'Phone Number'
     }
@@ -108,7 +107,6 @@ def create_sms_summaries(df):
         required_columns['date_col']: 'DATE',
         required_columns['env_col']: 'ENVIRONMENT',
         required_columns['client_col']: 'CLIENT',
-        required_columns['account_col']: 'ACCOUNT',
         required_columns['status_col']: 'STATUS',
         required_columns['phone_col']: 'PHONE'
     })
@@ -118,8 +116,7 @@ def create_sms_summaries(df):
     
     # Daily Summary
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).agg({
-        'ACCOUNT': lambda x: df_processed.loc[x.index, 'ACCOUNT'][df_processed.loc[x.index, 'STATUS'].notnull()].nunique(),  # Unique delivered accounts
-        'PHONE': lambda x: df_processed.loc[x.index, 'PHONE'][df_processed.loc[x.index, 'STATUS'].notnull()].nunique(),    # Unique delivered phone numbers
+        'PHONE': 'count',  # Total SMS sending attempts
         'STATUS': [
             lambda x: x.notnull().sum(),  # Count of delivered (not null)
             lambda x: x.isnull().sum()    # Count of failed (null)
@@ -127,7 +124,7 @@ def create_sms_summaries(df):
     }).reset_index()
     
     # Rename columns
-    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT UNIQUE', 'SMS SENT', 'SMS NOT SENT']
+    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'SMS SENT', 'SMS NOT SENT']
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
     # Overall Summary with Date Range
@@ -136,8 +133,7 @@ def create_sms_summaries(df):
     date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
     overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT']).agg({
-        'ACCOUNT': lambda x: df_processed.loc[x.index, 'ACCOUNT'][df_processed.loc[x.index, 'STATUS'].notnull()].nunique(),  # Unique delivered accounts
-        'PHONE': lambda x: df_processed.loc[x.index, 'PHONE'][df_processed.loc[x.index, 'STATUS'].notnull()].nunique(),    # Unique delivered phone numbers
+        'PHONE': 'count',  # Total SMS sending attempts
         'STATUS': [
             lambda x: x.notnull().sum(),  # Count of delivered (not null)
             lambda x: x.isnull().sum()    # Count of failed (null)
@@ -145,7 +141,7 @@ def create_sms_summaries(df):
     }).reset_index()
     
     # Rename columns and add date range
-    overall_summary.columns = ['ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT UNIQUE', 'SMS SENT', 'SMS NOT SENT']
+    overall_summary.columns = ['ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'SMS SENT', 'SMS NOT SENT']
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
     overall_summary = overall_summary.sort_values(['CLIENT'])
     
