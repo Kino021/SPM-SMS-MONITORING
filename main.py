@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
-import math
 
 st.set_page_config(layout="wide", page_title="DIALER PRODUCTIVITY PER CRITERIA OF BALANCE", page_icon="📊", initial_sidebar_state="expanded")
 
@@ -17,7 +16,7 @@ st.markdown(
         background: #2E2E2E;
     }
     h1, h2, h3 {
-        color: #87CEEB !important;  /* Light blue color */
+        color: #87CEEB !important;
         font-weight: bold !important;
     }
     </style>
@@ -74,12 +73,38 @@ def to_excel_single(df, sheet_name):
 
 # Function to process data and create summary
 def create_sms_summary(df):
-    # Convert Submission Date / Time to date only
-    df['Submission Date / Time'] = pd.to_datetime(df['Submission Date / Time']).dt.date
+    # Required columns
+    required_columns = {
+        'date_col': 'Submission Date / Time',
+        'env_col': 'ENVIRONMENT',
+        'client_col': 'CLIENT',
+        'account_col': 'ACCOUNT NO.',
+        'status_col': 'STATUS'
+    }
+    
+    # Check if all required columns exist
+    missing_cols = [col for name, col in required_columns.items() if col not in df.columns]
+    if missing_cols:
+        st.error(f"The following required columns are missing from your data: {', '.join(missing_cols)}")
+        st.write("Available columns in your data:", list(df.columns))
+        return None
+    
+    # Create a copy with renamed columns for consistency
+    df_processed = df.copy()
+    df_processed = df_processed.rename(columns={
+        required_columns['date_col']: 'DATE',
+        required_columns['env_col']: 'ENVIRONMENT',
+        required_columns['client_col']: 'CLIENT',
+        required_columns['account_col']: 'ACCOUNT',
+        required_columns['status_col']: 'STATUS'
+    })
+    
+    # Convert date column to date only
+    df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
     
     # Create summary DataFrame
-    summary = df.groupby(['Submission Date / Time', 'ENVIRONMENT', 'CLIENT']).agg({
-        'ACCOUNT NO.': 'nunique',  # Count unique accounts
+    summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).agg({
+        'ACCOUNT': 'nunique',  # Count unique accounts
         'STATUS': [
             lambda x: (x.str.upper() == 'DELIVERED').sum(),  # SMS Sent
             lambda x: (x.str.upper() == 'FAILED').sum()      # SMS Not Sent
@@ -102,18 +127,19 @@ if uploaded_file is not None:
     # Create SMS summary
     summary_df = create_sms_summary(df)
     
-    # Display the summary
-    st.subheader("SMS Summary per Client per Day")
-    st.dataframe(summary_df)
-    
-    # Download button for summary
-    excel_data = to_excel_single(summary_df, "SMS_Summary")
-    st.download_button(
-        label="Download SMS Summary",
-        data=excel_data,
-        file_name="sms_summary_per_client_per_day.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    if summary_df is not None:
+        # Display the summary
+        st.subheader("SMS Summary per Client per Day")
+        st.dataframe(summary_df)
+        
+        # Download button for summary
+        excel_data = to_excel_single(summary_df, "SMS_Summary")
+        st.download_button(
+            label="Download SMS Summary",
+            data=excel_data,
+            file_name="sms_summary_per_client_per_day.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     
     # Display raw data (optional)
     with st.expander("View Raw Data"):
