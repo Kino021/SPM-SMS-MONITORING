@@ -149,27 +149,14 @@ def to_excel_multiple(dfs_dict):
 def create_sms_summaries(df):
     required_columns = {
         'date_col': 'Submission Date / Time',
-        'env_col': 'Environment',
+        'env_col': 'ENVIRONMENT',  # Updated to match your file
         'client_col': 'Client',
         'status_col': 'SMS Status Response Date/Time',
-        'phone_col': 'Phone Number'
+        'phone_col': 'PHONE Number'  # Updated to match your file
     }
     
-    # Check for missing columns with case-insensitive and stripped comparison
-    available_cols = [col.strip() for col in df.columns]
-    missing_cols = []
-    col_mapping = {}
-    
-    for key, expected_col in required_columns.items():
-        found = False
-        for actual_col in available_cols:
-            if actual_col.lower() == expected_col.lower().strip():
-                col_mapping[key] = actual_col
-                found = True
-                break
-        if not found:
-            missing_cols.append(expected_col)
-    
+    # Check for missing columns
+    missing_cols = [col for name, col in required_columns.items() if col not in df.columns]
     if missing_cols:
         st.error(f"The following required columns are missing from your data: {', '.join(missing_cols)}")
         st.write("Available columns in your data:", list(df.columns))
@@ -177,11 +164,11 @@ def create_sms_summaries(df):
     
     df_processed = df.copy()
     df_processed = df_processed.rename(columns={
-        col_mapping['date_col']: 'DATE',
-        col_mapping['env_col']: 'ENVIRONMENT',
-        col_mapping['client_col']: 'CLIENT',
-        col_mapping['status_col']: 'STATUS',
-        col_mapping['phone_col']: 'PHONE'
+        required_columns['date_col']: 'DATE',
+        required_columns['env_col']: 'ENVIRONMENT',
+        required_columns['client_col']: 'CLIENT',
+        required_columns['status_col']: 'STATUS',
+        required_columns['phone_col']: 'PHONE'
     })
     
     df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
@@ -199,7 +186,7 @@ def create_sms_summaries(df):
     
     min_date = df_processed['DATE'].min()
     max_date = df_processed['DATE'].max()
-    date_range_str = f"{min_date.strftime('%B %d')} - = {max_date.strftime('%B %d, %Y')}"
+    date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
     overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT']).agg({
         'PHONE': 'count',
@@ -221,7 +208,6 @@ with st.sidebar:
 
 if uploaded_file is not None:
     df = load_data(uploaded_file)
-    st.write("Columns in uploaded file:", list(df.columns))  # Debugging output
     
     daily_summary_df, overall_summary_df = create_sms_summaries(df)
     
