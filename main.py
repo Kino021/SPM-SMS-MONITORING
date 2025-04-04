@@ -221,7 +221,6 @@ with st.sidebar:
 
 if uploaded_file is not None:
     df = load_data(uploaded_file)
-    st.write("Columns in uploaded file:", list(df.columns))  # Debugging output
     
     daily_summary_df, overall_summary_df = create_sms_summaries(df)
     
