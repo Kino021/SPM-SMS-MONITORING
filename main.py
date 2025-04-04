@@ -83,6 +83,50 @@ def to_excel_single(df, sheet_name):
     
     return output.getvalue()
 
+# Function to convert multiple DataFrames to Excel with multiple sheets
+def to_excel_multiple(dfs_dict):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        
+        header_format = workbook.add_format({
+            'bold': True,
+            'bg_color': '#87CEEB',
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+        cell_format = workbook.add_format({'border': 1})
+        
+        for sheet_name, df in dfs_dict.items():
+            df_copy = df.copy()
+            if 'DATE_RANGE' in df_copy.columns:
+                df_copy['DATE_RANGE'] = df_copy['DATE_RANGE'].astype(str)
+            elif 'DATE' in df_copy.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_copy['DATE']):
+                    df_copy['DATE'] = df_copy['DATE'].dt.strftime('%d-%m-%Y')
+                elif pd.api.types.is_object_dtype(df_copy['DATE']):
+                    df_copy['DATE'] = pd.to_datetime(df_copy['DATE'], errors='coerce').dt.strftime('%d-%m-%Y')
+            
+            df_copy.to_excel(writer, index=False, sheet_name=sheet_name)
+            worksheet = writer.sheets[sheet_name]
+            
+            for col_num, value in enumerate(df_copy.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            
+            for row_num in range(1, len(df_copy) + 1):
+                for col_num in range(len(df_copy.columns)):
+                    worksheet.write(row_num, col_num, df_copy.iloc[row_num-1, col_num], cell_format)
+            
+            for i, col in enumerate(df_copy.columns):
+                max_length = max(
+                    df_copy[col].astype(str).map(len).max(),
+                    len(str(col))
+                )
+                worksheet.set_column(i, i, max_length + 2)
+    
+    return output.getvalue()
+
 # Function to process data and create daily and overall summaries
 def create_sms_summaries(df):
     # Required columns with corrected names
@@ -116,14 +160,13 @@ def create_sms_summaries(df):
     
     # Daily Summary
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).agg({
-        'PHONE': 'count',  # Total SMS sending attempts
+        'PHONE': 'count',
         'STATUS': [
-            lambda x: x.notnull().sum(),  # Count of delivered (not null)
-            lambda x: x.isnull().sum()    # Count of failed (null)
+            lambda x: x.notnull().sum(),
+            lambda x: x.isnull().sum()
         ]
     }).reset_index()
     
-    # Rename columns
     daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'DELIVERED', 'FAILED']
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
@@ -133,14 +176,13 @@ def create_sms_summaries(df):
     date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
     overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT']).agg({
-        'PHONE': 'count',  # Total SMS sending attempts
+        'PHONE': 'count',
         'STATUS': [
-            lambda x: x.notnull().sum(),  # Count of delivered (not null)
-            lambda x: x.isnull().sum()    # Count of failed (null)
+            lambda x: x.notnull().sum(),
+            lambda x: x.isnull().sum()
         ]
     }).reset_index()
     
-    # Rename columns and add date range
     overall_summary.columns = ['ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'DELIVERED', 'FAILED']
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
     overall_summary = overall_summary.sort_values(['CLIENT'])
@@ -182,6 +224,19 @@ if uploaded_file is not None:
             label="Download Daily SMS Summary",
             data=daily_excel_data,
             file_name="daily_sms_summary_per_client_per_day.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        # Download All button
+        all_data_dict = {
+            "Overall_Summary": overall_summary_df,
+            "Daily_Summary": daily_summary_df
+        }
+        all_excel_data = to_excel_multiple(all_data_dict)
+        st.download_button(
+            label="Download All Summaries",
+            data=all_excel_data,
+            file_name="all_sms_summaries.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     
