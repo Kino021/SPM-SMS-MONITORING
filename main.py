@@ -51,7 +51,7 @@ def format_with_commas(df, numeric_cols):
 
 # Function to convert single DataFrame to Excel bytes with formatting
 def to_excel_single(df, sheet_name):
-    output    output = BytesIO()
+    output = BytesIO()  # Fixed syntax error here
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_copy = df.copy()
         if 'DATE_RANGE' in df_copy.columns:
