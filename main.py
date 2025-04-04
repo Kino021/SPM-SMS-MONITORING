@@ -41,9 +41,17 @@ def load_data(uploaded_file):
     df = pd.read_excel(uploaded_file)
     return df
 
+# Function to format numbers with commas
+def format_with_commas(df, numeric_cols):
+    df_copy = df.copy()
+    for col in numeric_cols:
+        if col in df_copy.columns:
+            df_copy[col] = df_copy[col].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else x)
+    return df_copy
+
 # Function to convert single DataFrame to Excel bytes with formatting
 def to_excel_single(df, sheet_name):
-    output = BytesIO()
+    output    output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_copy = df.copy()
         if 'DATE_RANGE' in df_copy.columns:
@@ -65,14 +73,18 @@ def to_excel_single(df, sheet_name):
             'align': 'center',
             'valign': 'vcenter'
         })
-        cell_format = workbook.add_format({'border': 1})
+        cell_format = workbook.add_format({'border': 1, 'num_format': '#,##0'})
+        text_format = workbook.add_format({'border': 1})
         
         for col_num, value in enumerate(df_copy.columns.values):
             worksheet.write(0, col_num, value, header_format)
         
+        numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
         for row_num in range(1, len(df_copy) + 1):
-            for col_num in range(len(df_copy.columns)):
-                worksheet.write(row_num, col_num, df_copy.iloc[row_num-1, col_num], cell_format)
+            for col_num, col_name in enumerate(df_copy.columns):
+                value = df_copy.iloc[row_num-1, col_num]
+                format_to_use = cell_format if col_name in numeric_cols else text_format
+                worksheet.write(row_num, col_num, value, format_to_use)
         
         for i, col in enumerate(df_copy.columns):
             max_length = max(
@@ -96,7 +108,8 @@ def to_excel_multiple(dfs_dict):
             'align': 'center',
             'valign': 'vcenter'
         })
-        cell_format = workbook.add_format({'border': 1})
+        cell_format = workbook.add_format({'border': 1, 'num_format': '#,##0'})
+        text_format = workbook.add_format({'border': 1})
         
         for sheet_name, df in dfs_dict.items():
             df_copy = df.copy()
@@ -114,9 +127,12 @@ def to_excel_multiple(dfs_dict):
             for col_num, value in enumerate(df_copy.columns.values):
                 worksheet.write(0, col_num, value, header_format)
             
+            numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
             for row_num in range(1, len(df_copy) + 1):
-                for col_num in range(len(df_copy.columns)):
-                    worksheet.write(row_num, col_num, df_copy.iloc[row_num-1, col_num], cell_format)
+                for col_num, col_name in enumerate(df_copy.columns):
+                    value = df_copy.iloc[row_num-1, col_num]
+                    format_to_use = cell_format if col_name in numeric_cols else text_format
+                    worksheet.write(row_num, col_num, value, format_to_use)
             
             for i, col in enumerate(df_copy.columns):
                 max_length = max(
@@ -129,7 +145,6 @@ def to_excel_multiple(dfs_dict):
 
 # Function to process data and create daily and overall summaries
 def create_sms_summaries(df):
-    # Required columns with corrected names
     required_columns = {
         'date_col': 'Submission Date / Time',
         'env_col': 'Environment',
@@ -138,14 +153,12 @@ def create_sms_summaries(df):
         'phone_col': 'Phone Number'
     }
     
-    # Check if all required columns exist
     missing_cols = [col for name, col in required_columns.items() if col not in df.columns]
     if missing_cols:
         st.error(f"The following required columns are missing from your data: {', '.join(missing_cols)}")
         st.write("Available columns in your data:", list(df.columns))
         return None, None
     
-    # Create a copy with renamed columns for consistency
     df_processed = df.copy()
     df_processed = df_processed.rename(columns={
         required_columns['date_col']: 'DATE',
@@ -155,10 +168,8 @@ def create_sms_summaries(df):
         required_columns['phone_col']: 'PHONE'
     })
     
-    # Convert date column to date only
     df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
     
-    # Daily Summary
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).agg({
         'PHONE': 'count',
         'STATUS': [
@@ -170,7 +181,6 @@ def create_sms_summaries(df):
     daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'DELIVERED', 'FAILED']
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
-    # Overall Summary with Date Range
     min_date = df_processed['DATE'].min()
     max_date = df_processed['DATE'].max()
     date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
@@ -194,18 +204,21 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Choose an Excel file", type=['xlsx'])
 
 if uploaded_file is not None:
-    # Load and process data
     df = load_data(uploaded_file)
-    
-    # Create both summaries
     daily_summary_df, overall_summary_df = create_sms_summaries(df)
     
     if daily_summary_df is not None and overall_summary_df is not None:
+        # Define numeric columns for comma formatting
+        numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
+        
+        # Format DataFrames for display
+        daily_summary_display = format_with_commas(daily_summary_df, numeric_cols)
+        overall_summary_display = format_with_commas(overall_summary_df, numeric_cols)
+        
         # Display Overall Summary
         st.subheader("Overall SMS Summary")
-        st.dataframe(overall_summary_df, use_container_width=True)
+        st.dataframe(overall_summary_display, use_container_width=True)
         
-        # Download button for overall summary
         overall_excel_data = to_excel_single(overall_summary_df, "Overall_SMS_Summary")
         st.download_button(
             label="Download Overall SMS Summary",
@@ -216,9 +229,8 @@ if uploaded_file is not None:
         
         # Display Daily Summary
         st.subheader("SMS Summary per Client per Day")
-        st.dataframe(daily_summary_df, use_container_width=True)
+        st.dataframe(daily_summary_display, use_container_width=True)
         
-        # Download button for daily summary
         daily_excel_data = to_excel_single(daily_summary_df, "Daily_SMS_Summary")
         st.download_button(
             label="Download Daily SMS Summary",
@@ -227,7 +239,6 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
-        # Download All button
         all_data_dict = {
             "Overall_Summary": overall_summary_df,
             "Daily_Summary": daily_summary_df
@@ -240,6 +251,5 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     
-    # Display raw data (optional)
     with st.expander("View Raw Data"):
         st.dataframe(df, use_container_width=True)
