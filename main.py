@@ -76,7 +76,7 @@ def create_sms_summary(df):
     # Required columns with corrected names
     required_columns = {
         'date_col': 'Submission Date / Time',
-        'env_col': 'Environment 2',
+        'env_col': 'Environment',
         'client_col': 'Client',
         'account_col': 'Account No.',
         'status_col': 'SMS Status Response Date/Time'
