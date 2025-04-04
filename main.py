@@ -91,7 +91,8 @@ def create_sms_summaries(df):
         'env_col': 'Environment',
         'client_col': 'Client',
         'account_col': 'Account No.',
-        'status_col': 'SMS Status Response Date/Time'
+        'status_col': 'SMS Status Response Date/Time',
+        'phone_col': 'Phone Number'  # Added phone number column
     }
     
     # Check if all required columns exist
@@ -108,7 +109,8 @@ def create_sms_summaries(df):
         required_columns['env_col']: 'ENVIRONMENT',
         required_columns['client_col']: 'CLIENT',
         required_columns['account_col']: 'ACCOUNT',
-        required_columns['status_col']: 'STATUS'
+        required_columns['status_col']: 'STATUS',
+        required_columns['phone_col']: 'PHONE'  # Added phone column
     })
     
     # Convert date column to date only
@@ -121,10 +123,11 @@ def create_sms_summaries(df):
     # Daily Summary
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).agg({
         'ACCOUNT': 'nunique',
+        'PHONE': lambda x: df_processed.loc[x.index, 'PHONE'][df_processed.loc[x.index, 'STATUS'].notnull()].nunique(),  # Unique delivered phone numbers
         'SMS_SENT': 'sum',
         'SMS_NOT_SENT': 'sum'
     }).reset_index()
-    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT', 'SMS NOT SENT']
+    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT UNIQUE', 'SMS SENT', 'SMS NOT SENT']
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
     # Overall Summary with Date Range
@@ -134,11 +137,12 @@ def create_sms_summaries(df):
     
     overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT']).agg({
         'ACCOUNT': 'nunique',
+        'PHONE': lambda x: df_processed.loc[x.index, 'PHONE'][df_processed.loc[x.index, 'STATUS'].notnull()].nunique(),  # Unique delivered phone numbers
         'SMS_SENT': 'sum',
         'SMS_NOT_SENT': 'sum'
     }).reset_index()
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
-    overall_summary.columns = ['DATE_RANGE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT', 'SMS NOT SENT']
+    overall_summary.columns = ['DATE_RANGE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT UNIQUE', 'SMS SENT', 'SMS NOT SENT']
     overall_summary = overall_summary.sort_values(['CLIENT'])
     
     return daily_summary, overall_summary
