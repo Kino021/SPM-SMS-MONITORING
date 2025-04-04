@@ -46,7 +46,9 @@ def to_excel_single(df, sheet_name):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_copy = df.copy()
-        if 'DATE' in df_copy.columns:
+        if 'DATE_RANGE' in df_copy.columns:
+            df_copy['DATE_RANGE'] = df_copy['DATE_RANGE'].astype(str)
+        elif 'DATE' in df_copy.columns:
             if pd.api.types.is_datetime64_any_dtype(df_copy['DATE']):
                 df_copy['DATE'] = df_copy['DATE'].dt.strftime('%d-%m-%Y')
             elif pd.api.types.is_object_dtype(df_copy['DATE']):
@@ -81,8 +83,8 @@ def to_excel_single(df, sheet_name):
     
     return output.getvalue()
 
-# Function to process data and create summary
-def create_sms_summary(df):
+# Function to process data and create daily and overall summaries
+def create_sms_summaries(df):
     # Required columns with corrected names
     required_columns = {
         'date_col': 'Submission Date / Time',
@@ -97,7 +99,7 @@ def create_sms_summary(df):
     if missing_cols:
         st.error(f"The following required columns are missing from your data: {', '.join(missing_cols)}")
         st.write("Available columns in your data:", list(df.columns))
-        return None
+        return None, None
     
     # Create a copy with renamed columns for consistency
     df_processed = df.copy()
@@ -112,24 +114,34 @@ def create_sms_summary(df):
     # Convert date column to date only
     df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
     
-    # Infer SMS status: if STATUS (SMS Status Response Date/Time) is not null, it's sent; otherwise, it's not sent
+    # Infer SMS status
     df_processed['SMS_SENT'] = df_processed['STATUS'].notnull().astype(int)  # 1 if sent, 0 if not
     df_processed['SMS_NOT_SENT'] = df_processed['STATUS'].isnull().astype(int)  # 1 if not sent, 0 if sent
     
-    # Create summary DataFrame
-    summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).agg({
-        'ACCOUNT': 'nunique',  # Count unique accounts
-        'SMS_SENT': 'sum',     # Total SMS Sent
-        'SMS_NOT_SENT': 'sum'  # Total SMS Not Sent
+    # Daily Summary
+    daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).agg({
+        'ACCOUNT': 'nunique',
+        'SMS_SENT': 'sum',
+        'SMS_NOT_SENT': 'sum'
     }).reset_index()
+    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT', 'SMS NOT SENT']
+    daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
-    # Rename columns
-    summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT', 'SMS NOT SENT']
+    # Overall Summary with Date Range
+    min_date = df_processed['DATE'].min()
+    max_date = df_processed['DATE'].max()
+    date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
-    # Sort by date and client
-    summary = summary.sort_values(['DATE', 'CLIENT'])
+    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT']).agg({
+        'ACCOUNT': 'nunique',
+        'SMS_SENT': 'sum',
+        'SMS_NOT_SENT': 'sum'
+    }).reset_index()
+    overall_summary.insert(0, 'DATE_RANGE', date_range_str)
+    overall_summary.columns = ['DATE_RANGE', 'ENVIRONMENT', 'CLIENT', 'ACCOUNTS', 'SMS SENT', 'SMS NOT SENT']
+    overall_summary = overall_summary.sort_values(['CLIENT'])
     
-    return summary
+    return daily_summary, overall_summary
 
 with st.sidebar:
     st.subheader("Upload File")
@@ -139,23 +151,36 @@ if uploaded_file is not None:
     # Load and process data
     df = load_data(uploaded_file)
     
-    # Create SMS summary
-    summary_df = create_sms_summary(df)
+    # Create both summaries
+    daily_summary_df, overall_summary_df = create_sms_summaries(df)
     
-    if summary_df is not None:
-        # Display the summary in a wide layout
-        st.subheader("SMS Summary per Client per Day")
-        st.dataframe(summary_df, use_container_width=True)  # Use full container width
+    if daily_summary_df is not None and overall_summary_df is not None:
+        # Display Overall Summary
+        st.subheader("Overall SMS Summary")
+        st.dataframe(overall_summary_df, use_container_width=True)
         
-        # Download button for summary
-        excel_data = to_excel_single(summary_df, "SMS_Summary")
+        # Download button for overall summary
+        overall_excel_data = to_excel_single(overall_summary_df, "Overall_SMS_Summary")
         st.download_button(
-            label="Download SMS Summary",
-            data=excel_data,
-            file_name="sms_summary_per_client_per_day.xlsx",
+            label="Download Overall SMS Summary",
+            data=overall_excel_data,
+            file_name="overall_sms_summary.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        # Display Daily Summary
+        st.subheader("SMS Summary per Client per Day")
+        st.dataframe(daily_summary_df, use_container_width=True)
+        
+        # Download button for daily summary
+        daily_excel_data = to_excel_single(daily_summary_df, "Daily_SMS_Summary")
+        st.download_button(
+            label="Download Daily SMS Summary",
+            data=daily_excel_data,
+            file_name="daily_sms_summary_per_client_per_day.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     
-    # Display raw data in a wide layout (optional)
+    # Display raw data (optional)
     with st.expander("View Raw Data"):
-        st.dataframe(df, use_container_width=True)  # Use full container width
+        st.dataframe(df, use_container_width=True)
