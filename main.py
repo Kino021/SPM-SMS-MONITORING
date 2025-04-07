@@ -157,7 +157,7 @@ def create_sms_summaries(df):
     
     df_processed = df.copy()
     df_processed = df_processed.rename(columns={
-        col_mapping['date_col']: 'SMS Status Response Date/Time',
+        col_mapping['date_col']: 'DATE',
         col_mapping['env_col']: 'ENVIRONMENT',
         col_mapping['client_col']: 'CLIENT',
         col_mapping['status_col']: 'STATUS',
