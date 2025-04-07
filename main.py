@@ -129,7 +129,7 @@ def to_excel_multiple(dfs_dict):
 
 def create_sms_summaries(df):
     required_columns = {
-        'date_col': 'SMS Status Response Date/Time',
+        'date_col': 'Submission Date / Time',
         'env_col': 'Environment',
         'client_col': 'Client',
         'status_col': 'SMS Status Response Date/Time',
