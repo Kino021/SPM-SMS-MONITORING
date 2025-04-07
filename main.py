@@ -129,10 +129,10 @@ def to_excel_multiple(dfs_dict):
 
 def create_sms_summaries(df):
     required_columns = {
-        'date_col': 'SMS Status Response Date/Time',  # Use this for the date
+        'date_col': 'SMS Status Response Date/Time',
         'env_col': 'Environment',
         'client_col': 'Client',
-        'status_col': 'Status',  # Use this for the SMS status
+        'status_col': 'Status',
         'phone_col': 'Phone Number'
     }
     
@@ -181,12 +181,23 @@ def create_sms_summaries(df):
         st.error("The 'DATE' column was not created successfully. Check your data and column names.")
         return None, None
     
+    # Debug: Show a sample of the 'DATE' column before conversion
+    st.write("Sample of 'DATE' column before conversion (first 5 rows):", df_processed['DATE'].head().tolist())
+    
     # Convert 'DATE' from 'dd-mm-yyyy hh:mm:ss' to date only
     df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    
+    # Debug: Show a sample of the 'DATE' column after conversion
+    st.write("Sample of 'DATE' column after conversion (first 5 rows):", df_processed['DATE'].head().tolist())
     
     # Check for any invalid dates
     if df_processed['DATE'].isnull().any():
         st.warning("Some dates could not be parsed correctly and were set to NaT. Check your date formats.")
+    
+    # Check if all dates are NaT
+    if df_processed['DATE'].isnull().all():
+        st.error("All dates in the 'DATE' column are invalid (NaT). Please check the format of 'SMS Status Response Date/Time' in your data.")
+        return None, None
     
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
         'PHONE': 'count',
