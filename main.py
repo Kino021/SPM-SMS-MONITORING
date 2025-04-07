@@ -129,10 +129,10 @@ def to_excel_multiple(dfs_dict):
 
 def create_sms_summaries(df):
     required_columns = {
-        'date_col': 'SMS Status Response Date/Time',
+        'date_col': 'Submission Date / Time',
         'env_col': 'Environment',
         'client_col': 'Client',
-        'status_col': 'Status',
+        'status_col': 'Submission Date / Time',
         'phone_col': 'Phone Number'
     }
     
@@ -140,16 +140,12 @@ def create_sms_summaries(df):
     missing_cols = []
     col_mapping = {}
     
-    # Debug: Show all available columns before mapping
-    st.write("Available columns before mapping:", available_cols)
-    
     for key, expected_col in required_columns.items():
         found = False
         for actual_col in available_cols:
-            if actual_col.lower().strip() == expected_col.lower().strip():
+            if actual_col.lower() == expected_col.lower().strip():
                 col_mapping[key] = actual_col
                 found = True
-                st.write(f"Matched: '{actual_col}' to '{expected_col}' for key '{key}'")
                 break
         if not found:
             missing_cols.append(expected_col)
@@ -159,12 +155,7 @@ def create_sms_summaries(df):
         st.write("Available columns in your data:", list(df.columns))
         return None, None
     
-    # Debug: Show the column mapping
-    st.write("Column mapping:", col_mapping)
-    
     df_processed = df.copy()
-    
-    # Rename columns explicitly using the mapped names
     df_processed = df_processed.rename(columns={
         col_mapping['date_col']: 'DATE',
         col_mapping['env_col']: 'ENVIRONMENT',
@@ -173,31 +164,7 @@ def create_sms_summaries(df):
         col_mapping['phone_col']: 'PHONE'
     })
     
-    # Debug: Show columns after renaming
-    st.write("Columns after renaming:", list(df_processed.columns))
-    
-    # Verify that 'DATE' exists
-    if 'DATE' not in df_processed.columns:
-        st.error("The 'DATE' column was not created successfully. Check your data and column names.")
-        return None, None
-    
-    # Debug: Show a sample of the 'DATE' column before conversion
-    st.write("Sample of 'DATE' column before conversion (first 5 rows):", df_processed['DATE'].head().tolist())
-    
-    # Convert 'DATE' from 'dd-mm-yyyy hh:mm:ss' to date only
-    df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
-    
-    # Debug: Show a sample of the 'DATE' column after conversion
-    st.write("Sample of 'DATE' column after conversion (first 5 rows):", df_processed['DATE'].head().tolist())
-    
-    # Check for any invalid dates
-    if df_processed['DATE'].isnull().any():
-        st.warning("Some dates could not be parsed correctly and were set to NaT. Check your date formats.")
-    
-    # Check if all dates are NaT
-    if df_processed['DATE'].isnull().all():
-        st.error("All dates in the 'DATE' column are invalid (NaT). Please check the format of 'SMS Status Response Date/Time' in your data.")
-        return None, None
+    df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
     
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
         'PHONE': 'count',
@@ -275,6 +242,3 @@ if uploaded_files:
             file_name="all_sms_summaries.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-    
-    with st.expander("View Combined Raw Data"):
-        st.dataframe(df, use_container_width=True)
