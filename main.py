@@ -92,8 +92,6 @@ def to_excel_single(df, sheet_name):
 def to_excel_multiple(dfs_dict):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-       売
-
         workbook = writer.book
         
         header_format = workbook.add_format({'bold': True, 'bg_color': '#87CEEB', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
