@@ -143,7 +143,7 @@ def create_sms_summaries(df):
     for key, expected_col in required_columns.items():
         found = False
         for actual_col in available_cols:
-            if actual_col.lower() == expected_col.lower().strip():
+            if actual_col.lower().strip() == expected_col.lower().strip():
                 col_mapping[key] = actual_col
                 found = True
                 break
@@ -155,6 +155,9 @@ def create_sms_summaries(df):
         st.write("Available columns in your data:", list(df.columns))
         return None, None
     
+    # Debug: Print the column mapping
+    st.write("Column mapping:", col_mapping)
+    
     df_processed = df.copy()
     df_processed = df_processed.rename(columns={
         col_mapping['date_col']: 'DATE',
@@ -164,7 +167,14 @@ def create_sms_summaries(df):
         col_mapping['phone_col']: 'PHONE'
     })
     
-    df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
+    # Debug: Check columns after renaming
+    st.write("Columns after renaming:", list(df_processed.columns))
+    
+    if 'DATE' not in df_processed.columns:
+        st.error("The 'DATE' column was not created successfully. Check your data and column names.")
+        return None, None
+    
+    df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], errors='coerce').dt.date
     
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
         'PHONE': 'count',
