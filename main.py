@@ -155,10 +155,12 @@ def create_sms_summaries(df):
         st.write("Available columns in your data:", list(df.columns))
         return None, None
     
-    # Debug: Print the column mapping
+    # Debug: Show the column mapping
     st.write("Column mapping:", col_mapping)
     
     df_processed = df.copy()
+    
+    # Rename columns explicitly using the mapped names
     df_processed = df_processed.rename(columns={
         col_mapping['date_col']: 'DATE',
         col_mapping['env_col']: 'ENVIRONMENT',
@@ -167,14 +169,20 @@ def create_sms_summaries(df):
         col_mapping['phone_col']: 'PHONE'
     })
     
-    # Debug: Check columns after renaming
+    # Debug: Show columns after renaming
     st.write("Columns after renaming:", list(df_processed.columns))
     
+    # Verify that 'DATE' exists
     if 'DATE' not in df_processed.columns:
         st.error("The 'DATE' column was not created successfully. Check your data and column names.")
         return None, None
     
-    df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], errors='coerce').dt.date
+    # Convert 'DATE' from 'dd-mm-yyyy hh:mm:ss' to date only
+    df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    
+    # Check for any invalid dates
+    if df_processed['DATE'].isnull().any():
+        st.warning("Some dates could not be parsed correctly and were set to NaT. Check your date formats.")
     
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
         'PHONE': 'count',
