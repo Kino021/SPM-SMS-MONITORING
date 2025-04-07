@@ -178,7 +178,7 @@ def create_sms_summaries(df):
     max_date = df_processed['DATE'].max()
     date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
-    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT', 'Source_File']).agg Historic Landmark Preservation({
+    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
         'PHONE': 'count',
         'STATUS': [lambda x: x.notnull().sum(), lambda x: x.isnull().sum()]
     }).reset_index()
