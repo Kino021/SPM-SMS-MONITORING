@@ -42,8 +42,7 @@ def load_data(uploaded_files):
     for file in uploaded_files:
         df = pd.read_excel(file)
         df.columns = df.columns.str.strip()
-        df['Source_File'] = file.name
-        dfs.append(df)
+        dfs.append(df)  # Removed 'Source_File' addition
     return pd.concat(dfs, ignore_index=True)
 
 def format_with_commas(df, numeric_cols):
@@ -182,8 +181,8 @@ def create_sms_summaries(df):
         st.warning(f"Error converting 'Submission Date / Time': {str(e)}")
         df_processed['SUBMISSION_DATE'] = pd.to_datetime(df_processed['SUBMISSION_DATE'], errors='coerce').dt.date
     
-    # Daily summary with modified logic
-    daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).apply(
+    # Daily summary without Source_File
+    daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).apply(
         lambda x: pd.Series({
             'SMS SENDING': x['ENVIRONMENT'].notna().sum(),
             'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),
@@ -203,8 +202,8 @@ def create_sms_summaries(df):
         max_date = valid_dates.max()
         date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
-    # Overall summary with modified logic
-    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT', 'Source_File']).apply(
+    # Overall summary without Source_File
+    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT']).apply(
         lambda x: pd.Series({
             'SMS SENDING': x['ENVIRONMENT'].notna().sum(),
             'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),
