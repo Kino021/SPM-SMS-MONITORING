@@ -41,7 +41,7 @@ def load_data(uploaded_files):
     dfs = []
     for file in uploaded_files:
         df = pd.read_excel(file)
-        df.columns = df.columns.str.strip()  # Remove leading/trailing spaces from column names
+        df.columns = df.columns.str.strip()
         df['Source_File'] = file.name
         dfs.append(df)
     return pd.concat(dfs, ignore_index=True)
@@ -128,18 +128,18 @@ def to_excel_multiple(dfs_dict):
     return output.getvalue()
 
 def create_sms_summaries(df):
-    # Updated required columns to match your dataset
     required_columns = {
-        'date_col': 'SMS Status Response Date/Time',  # Matches your dataset
+        'date_col': 'Submission Date / Time',
+        'env_col': 'Environment',
         'client_col': 'Client',
-        'status_col': 'SMS Status',  # Corrected to match the exact column name in your dataset
+        'status_col': 'Submission Date / Time',
+        'phone_col': 'Phone Number'
     }
     
     available_cols = [col.strip() for col in df.columns]
     missing_cols = []
     col_mapping = {}
     
-    # Check for required columns in the dataset
     for key, expected_col in required_columns.items():
         found = False
         for actual_col in available_cols:
@@ -158,45 +158,32 @@ def create_sms_summaries(df):
     df_processed = df.copy()
     df_processed = df_processed.rename(columns={
         col_mapping['date_col']: 'DATE',
+        col_mapping['env_col']: 'ENVIRONMENT',
         col_mapping['client_col']: 'CLIENT',
         col_mapping['status_col']: 'STATUS',
+        col_mapping['phone_col']: 'PHONE'
     })
     
-    # Parse the date with the correct format (e.g., '08-03-2025 12:27:58')
-    df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
     
-    # Check if date parsing worked, and display a warning if there are issues
-    if df_processed['DATE'].isnull().any():
-        st.warning("Some dates could not be parsed correctly. Please ensure the 'SMS Status Response Date/Time' column follows the format 'DD-MM-YYYY HH:MM:SS'.")
-    
-    # Group by DATE, CLIENT, and Source_File to calculate SMS sending, delivered, and failed counts
-    # Since 'Phone Number' isn't available, we'll count rows as SMS attempts
-    daily_summary = df_processed.groupby(['DATE', 'CLIENT', 'Source_File']).agg({
-        'STATUS': [
-            lambda x: len(x),  # Total SMS attempts (each row is an SMS)
-            lambda x: (x.str.contains('DELIVERED', case=False, na=False)).sum(),  # Count of delivered SMS
-            lambda x: (x.str.contains('FAILED', case=False, na=False)).sum()  # Count of failed SMS
-        ]
+    daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
+        'PHONE': 'count',
+        'STATUS': [lambda x: x.notnull().sum(), lambda x: x.isnull().sum()]
     }).reset_index()
     
-    daily_summary.columns = ['DATE', 'CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
+    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
-    # Calculate date range for the overall summary
     min_date = df_processed['DATE'].min()
     max_date = df_processed['DATE'].max()
-    date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}" if min_date and max_date else "Unknown Date Range"
+    date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
-    # Overall summary without DATE
-    overall_summary = df_processed.groupby(['CLIENT', 'Source_File']).agg({
-        'STATUS': [
-            lambda x: len(x),  # Total SMS attempts
-            lambda x: (x.str.contains('DELIVERED', case=False, na=False)).sum(),
-            lambda x: (x.str.contains('FAILED', case=False, na=False)).sum()
-        ]
+    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
+        'PHONE': 'count',
+        'STATUS': [lambda x: x.notnull().sum(), lambda x: x.isnull().sum()]
     }).reset_index()
     
-    overall_summary.columns = ['CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
+    overall_summary.columns = ['ENVIRONMENT', 'CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
     overall_summary = overall_summary.sort_values(['CLIENT'])
     
