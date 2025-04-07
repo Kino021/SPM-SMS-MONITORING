@@ -50,7 +50,7 @@ def format_with_commas(df, numeric_cols):
     df_copy = df.copy()
     for col in numeric_cols:
         if col in df_copy.columns:
-            df_copy[col] = df_copy[col].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else x)
+            df_copy[col] = df_copy[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else x)
     return df_copy
 
 def to_excel_single(df, sheet_name):
@@ -136,15 +136,15 @@ def create_sms_summaries(df):
         'phone_col': 'Phone Number'
     }
     
-    available_cols = [col.strip() for col in df.columns]
+    available_cols = [col.strip().lower() for col in df.columns]
     missing_cols = []
     col_mapping = {}
     
     for key, expected_col in required_columns.items():
         found = False
         for actual_col in available_cols:
-            if actual_col.lower() == expected_col.lower().strip():
-                col_mapping[key] = actual_col
+            if actual_col == expected_col.lower().strip():
+                col_mapping[key] = next(col for col in df.columns if col.strip().lower() == actual_col)
                 found = True
                 break
         if not found:
@@ -164,26 +164,30 @@ def create_sms_summaries(df):
         col_mapping['phone_col']: 'PHONE'
     })
     
-    df_processed['DATE'] = pd.to_datetime(df_processed['DATE']).dt.date
+    df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], errors='coerce').dt.date
     
-    daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
-        'PHONE': 'count',
-        'STATUS': [lambda x: x.notnull().sum(), lambda x: x.isnull().sum()]
-    }).reset_index()
-    
-    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
+    # Daily summary with specific status counts
+    daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).apply(
+        lambda x: pd.Series({
+            'SMS SENDING': x['PHONE'].count(),
+            'DELIVERED': (x['STATUS'] == 'Delivered').sum(),
+            'FAILED': (x['STATUS'] == 'Failed').sum()
+        })
+    ).reset_index()
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
     min_date = df_processed['DATE'].min()
     max_date = df_processed['DATE'].max()
     date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
-    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
-        'PHONE': 'count',
-        'STATUS': [lambda x: x.notnull().sum(), lambda x: x.isnull().sum()]
-    }).reset_index()
-    
-    overall_summary.columns = ['ENVIRONMENT', 'CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
+    # Overall summary with specific status counts
+    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT', 'Source_File']).apply(
+        lambda x: pd.Series({
+            'SMS SENDING': x['PHONE'].count(),
+            'DELIVERED': (x['STATUS'] == 'Delivered').sum(),
+            'FAILED': (x['STATUS'] == 'Failed').sum()
+        })
+    ).reset_index()
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
     overall_summary = overall_summary.sort_values(['CLIENT'])
     
