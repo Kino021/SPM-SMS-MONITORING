@@ -4,7 +4,7 @@ from io import BytesIO
 
 st.set_page_config(layout="wide", page_title="DIALER PRODUCTIVITY PER CRITERIA OF BALANCE", page_icon="📊", initial_sidebar_state="expanded")
 
-# Apply dark mode and custom styling
+# Apply dark mode and custom styling (unchanged)
 st.markdown(
     """
     <style>
@@ -37,13 +37,10 @@ st.markdown(
 st.title('SPM SMS MONITORING ALL ENVI')
 
 @st.cache_data
-def load_data(uploaded_files):
-    dfs = []
-    for file in uploaded_files:
-        df = pd.read_excel(file)
-        df.columns = df.columns.str.strip()
-        dfs.append(df)  # Removed 'Source_File' addition
-    return pd.concat(dfs, ignore_index=True)
+def load_single_file(file):
+    df = pd.read_excel(file)
+    df.columns = df.columns.str.strip()
+    return df
 
 def format_with_commas(df, numeric_cols):
     df_copy = df.copy()
@@ -52,7 +49,9 @@ def format_with_commas(df, numeric_cols):
             df_copy[col] = df_copy[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else x)
     return df_copy
 
+# Excel writing functions remain unchanged
 def to_excel_single(df, sheet_name):
+    # [Previous implementation remains the same]
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_copy = df.copy()
@@ -89,6 +88,7 @@ def to_excel_single(df, sheet_name):
     return output.getvalue()
 
 def to_excel_multiple(dfs_dict):
+    # [Previous implementation remains the same]
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
@@ -126,7 +126,7 @@ def to_excel_multiple(dfs_dict):
     
     return output.getvalue()
 
-def create_sms_summaries(df):
+def create_sms_summary_single_file(df):
     required_columns = {
         'date_col': 'SMS Status Response Date/Time',
         'env_col': 'Environment',
@@ -151,9 +151,7 @@ def create_sms_summaries(df):
             missing_cols.append(expected_col)
     
     if missing_cols:
-        st.error(f"The following required columns are missing from your data: {', '.join(missing_cols)}")
-        st.write("Available columns in your data:", list(df.columns))
-        return None, None
+        return None, missing_cols
     
     df_processed = df.copy()
     df_processed = df_processed.rename(columns={
@@ -165,23 +163,18 @@ def create_sms_summaries(df):
         col_mapping['phone_col']: 'PHONE'
     })
     
-    # Replace blank or missing CLIENT values with "SYSTEM"
     df_processed['CLIENT'] = df_processed['CLIENT'].replace('', 'SYSTEM').fillna('SYSTEM')
     
-    # Extract only date with robust handling
     try:
         df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
-    except Exception as e:
-        st.warning(f"Error converting 'SMS Status Response Date/Time': {str(e)}")
+    except Exception:
         df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], errors='coerce').dt.date
     
     try:
         df_processed['SUBMISSION_DATE'] = pd.to_datetime(df_processed['SUBMISSION_DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
-    except Exception as e:
-        st.warning(f"Error converting 'Submission Date / Time': {str(e)}")
+    except Exception:
         df_processed['SUBMISSION_DATE'] = pd.to_datetime(df_processed['SUBMISSION_DATE'], errors='coerce').dt.date
     
-    # Daily summary without Source_File
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).apply(
         lambda x: pd.Series({
             'SMS SENDING': x['ENVIRONMENT'].notna().sum(),
@@ -191,29 +184,7 @@ def create_sms_summaries(df):
     ).reset_index()
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
-    # Check if we have valid dates before calculating min/max
-    valid_dates = df_processed['DATE'].dropna()
-    if len(valid_dates) == 0:
-        st.error("No valid dates found in 'SMS Status Response Date/Time' column")
-        st.write("Sample of raw date values:", df_processed['DATE'].head().tolist())
-        date_range_str = "Invalid Date Range"
-    else:
-        min_date = valid_dates.min()
-        max_date = valid_dates.max()
-        date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
-    
-    # Overall summary without Source_File
-    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT']).apply(
-        lambda x: pd.Series({
-            'SMS SENDING': x['ENVIRONMENT'].notna().sum(),
-            'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),
-            'FAILED': (x['STATUS'].str.lower() == 'failed').sum()
-        })
-    ).reset_index()
-    overall_summary.insert(0, 'DATE_RANGE', date_range_str)
-    overall_summary = overall_summary.sort_values(['CLIENT'])
-    
-    return daily_summary, overall_summary
+    return daily_summary, None
 
 with st.sidebar:
     st.subheader("Upload Files")
@@ -225,20 +196,53 @@ with st.sidebar:
     )
 
 if uploaded_files:
-    df = load_data(uploaded_files)
+    all_daily_summaries = []
+    all_dates = []
     
-    daily_summary_df, overall_summary_df = create_sms_summaries(df)
-    
-    if daily_summary_df is not None and overall_summary_df is not None:
-        numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
+    # Process each file individually
+    for file in uploaded_files:
+        df = load_single_file(file)
+        daily_summary, missing_cols = create_sms_summary_single_file(df)
         
-        daily_summary_display = format_with_commas(daily_summary_df, numeric_cols)
-        overall_summary_display = format_with_commas(overall_summary_df, numeric_cols)
+        if daily_summary is not None:
+            all_daily_summaries.append(daily_summary)
+            valid_dates = daily_summary['DATE'].dropna()
+            if not valid_dates.empty:
+                all_dates.extend(valid_dates)
+        else:
+            st.error(f"Error processing {file.name}: Missing columns - {', '.join(missing_cols)}")
+            st.write("Available columns:", list(df.columns))
+    
+    if all_daily_summaries:
+        # Concatenate all daily summaries
+        combined_daily_summary = pd.concat(all_daily_summaries, ignore_index=True)
+        
+        # Create overall summary from combined daily summary
+        overall_summary = combined_daily_summary.groupby(['ENVIRONMENT', 'CLIENT']).agg({
+            'SMS SENDING': 'sum',
+            'DELIVERED': 'sum',
+            'FAILED': 'sum'
+        }).reset_index()
+        
+        # Calculate date range
+        if all_dates:
+            min_date = min(all_dates)
+            max_date = max(all_dates)
+            date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
+        else:
+            date_range_str = "Invalid Date Range"
+        
+        overall_summary.insert(0, 'DATE_RANGE', date_range_str)
+        overall_summary = overall_summary.sort_values(['CLIENT'])
+        
+        numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
+        daily_summary_display = format_with_commas(combined_daily_summary, numeric_cols)
+        overall_summary_display = format_with_commas(overall_summary, numeric_cols)
         
         st.subheader("Overall SMS Summary")
         st.dataframe(overall_summary_display, use_container_width=True)
         
-        overall_excel_data = to_excel_single(overall_summary_df, "Overall_SMS_Summary")
+        overall_excel_data = to_excel_single(overall_summary, "Overall_SMS_Summary")
         st.download_button(
             label="Download Overall SMS Summary",
             data=overall_excel_data,
@@ -249,7 +253,7 @@ if uploaded_files:
         st.subheader("SMS Summary per Client per Day")
         st.dataframe(daily_summary_display, use_container_width=True)
         
-        daily_excel_data = to_excel_single(daily_summary_df, "Daily_SMS_Summary")
+        daily_excel_data = to_excel_single(combined_daily_summary, "Daily_SMS_Summary")
         st.download_button(
             label="Download Daily SMS Summary",
             data=daily_excel_data,
@@ -258,8 +262,8 @@ if uploaded_files:
         )
         
         all_data_dict = {
-            "Overall_Summary": overall_summary_df,
-            "Daily_Summary": daily_summary_df
+            "Overall_Summary": overall_summary,
+            "Daily_Summary": combined_daily_summary
         }
         all_excel_data = to_excel_multiple(all_data_dict)
         st.download_button(
