@@ -1,16 +1,17 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+from datetime import datetime
 
-# Set page configuration
+# Page configuration
 st.set_page_config(
     layout="wide",
-    page_title="DAILY SMS SUMMARY CONSOLIDATOR",
-    page_icon="📊",
+    page_title="SMS SUMMARY AGGREGATOR",
+    page_icon="📈",
     initial_sidebar_state="expanded"
 )
 
-# Apply dark mode and custom styling
+# Custom styling
 st.markdown(
     """
     <style>
@@ -32,25 +33,29 @@ st.markdown(
         width: 100% !important;
         font-size: 14px;
     }
+    .stSelectbox, .stDateInput {
+        color: white;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
 # Title
-st.title('DAILY SMS SUMMARY CONSOLIDATOR')
+st.title('SMS SUMMARY AGGREGATOR')
 
-# Function to load and cache multiple Excel files
+# Data loading function
 @st.cache_data
-def load_daily_summaries(uploaded_files):
+def load_summaries(uploaded_files):
     dfs = []
     for file in uploaded_files:
         df = pd.read_excel(file)
-        df.columns = df.columns.str.strip()  # Clean column names
+        df.columns = df.columns.str.strip()
+        df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
         dfs.append(df)
     return pd.concat(dfs, ignore_index=True)
 
-# Function to format numbers with commas for display
+# Number formatting function
 def format_with_commas(df, numeric_cols):
     df_copy = df.copy()
     for col in numeric_cols:
@@ -58,26 +63,19 @@ def format_with_commas(df, numeric_cols):
             df_copy[col] = df_copy[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else x)
     return df_copy
 
-# Function to create Excel file
+# Excel export function
 def to_excel_single(df, sheet_name):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_copy = df.copy()
-        # Format DATE column if present
         if 'DATE' in df_copy.columns:
-            if pd.api.types.is_datetime64_any_dtype(df_copy['DATE']):
-                df_copy['DATE'] = df_copy['DATE'].dt.strftime('%d-%m-%Y')
-            elif pd.api.types.is_object_dtype(df_copy['DATE']):
-                df_copy['DATE'] = pd.to_datetime(df_copy['DATE'], errors='coerce').dt.strftime('%d-%m-%Y')
+            df_copy['DATE'] = df_copy['DATE'].dt.strftime('%d-%m-%Y')
         
-        # Write to Excel
         df_copy.to_excel(writer, index=False, sheet_name=sheet_name)
         
-        # Get workbook and worksheet objects
         workbook = writer.book
         worksheet = writer.sheets[sheet_name]
         
-        # Define formats
         header_format = workbook.add_format({
             'bold': True,
             'bg_color': '#87CEEB',
@@ -88,11 +86,9 @@ def to_excel_single(df, sheet_name):
         cell_format = workbook.add_format({'border': 1, 'num_format': '#,##0'})
         text_format = workbook.add_format({'border': 1})
         
-        # Write headers with format
         for col_num, value in enumerate(df_copy.columns.values):
             worksheet.write(0, col_num, value, header_format)
         
-        # Apply formatting to cells
         numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
         for row_num in range(1, len(df_copy) + 1):
             for col_num, col_name in enumerate(df_copy.columns):
@@ -100,73 +96,107 @@ def to_excel_single(df, sheet_name):
                 format_to_use = cell_format if col_name in numeric_cols else text_format
                 worksheet.write(row_num, col_num, value, format_to_use)
         
-        # Adjust column widths
         for i, col in enumerate(df_copy.columns):
             max_length = max(df_copy[col].astype(str).map(len).max(), len(str(col)))
             worksheet.set_column(i, i, max_length + 2)
     
     return output.getvalue()
 
-# Function to create overall summary
-def create_overall_summary(df):
-    # Ensure DATE is in datetime format
-    if not pd.api.types.is_datetime64_any_dtype(df['DATE']):
-        df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
+# Summary creation function
+def create_monthly_summary(df):
+    df['MONTH_YEAR'] = df['DATE'].dt.strftime('%B %Y')
     
-    # Get date range from valid dates
     valid_dates = df['DATE'].dropna()
-    if len(valid_dates) == 0:
-        st.error("No valid dates found in the uploaded files")
-        date_range_str = "Invalid Date Range"
-    else:
-        min_date = valid_dates.min()
-        max_date = valid_dates.max()
-        date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
+    date_range_str = (f"{valid_dates.min().strftime('%B %d, %Y')} - "
+                     f"{valid_dates.max().strftime('%B %d, %Y')}" if len(valid_dates) > 0 
+                     else "Invalid Date Range")
     
-    # Create overall summary by aggregating totals
-    overall_summary = df.groupby(['ENVIRONMENT', 'CLIENT']).agg({
+    monthly_summary = df.groupby(['MONTH_YEAR', 'ENVIRONMENT', 'CLIENT']).agg({
         'SMS SENDING': 'sum',
         'DELIVERED': 'sum',
         'FAILED': 'sum'
     }).reset_index()
     
-    # Add date range column
-    overall_summary.insert(0, 'DATE_RANGE', date_range_str)
-    return overall_summary
+    monthly_summary.insert(0, 'DATE_RANGE', date_range_str)
+    return monthly_summary
 
-# Sidebar file uploader
+# Sidebar
 with st.sidebar:
-    st.subheader("Upload Daily Summary Files")
+    st.subheader("Upload & Filter Options")
+    
     uploaded_files = st.file_uploader(
-        "Choose Daily Summary Excel files",
+        "Upload Daily Summary Files",
         type=['xlsx'],
         accept_multiple_files=True,
-        help="Select multiple Daily_SMS_Summary files to consolidate"
+        help="Select multiple Daily_SMS_Summary files"
     )
+    
+    if uploaded_files:
+        df = load_summaries(uploaded_files)
+        
+        # Filter options
+        st.subheader("Filters")
+        environments = ['All'] + sorted(df['ENVIRONMENT'].unique().tolist())
+        selected_env = st.selectbox("Select Environment", environments)
+        
+        clients = ['All'] + sorted(df['CLIENT'].unique().tolist())
+        selected_client = st.selectbox("Select Client", clients)
+        
+        min_date = df['DATE'].min().date()
+        max_date = df['DATE'].max().date()
+        date_range = st.date_input(
+            "Select Date Range",
+            [min_date, max_date],
+            min_value=min_date,
+            max_value=max_date
+        )
 
 # Main content
 if uploaded_files:
-    # Load and concatenate all uploaded files
-    combined_df = load_daily_summaries(uploaded_files)
+    df = load_summaries(uploaded_files)
     
-    # Generate overall summary
-    overall_summary_df = create_overall_summary(combined_df)
+    # Apply filters
+    filtered_df = df.copy()
+    if selected_env != 'All':
+        filtered_df = filtered_df[filtered_df['ENVIRONMENT'] == selected_env]
+    if selected_client != 'All':
+        filtered_df = filtered_df[filtered_df['CLIENT'] == selected_client]
+    if len(date_range) == 2:
+        start_date, end_date = date_range
+        filtered_df = filtered_df[
+            (filtered_df['DATE'].dt.date >= start_date) & 
+            (filtered_df['DATE'].dt.date <= end_date)
+        ]
     
-    # Format numbers for display
+    # Create summary
+    monthly_summary_df = create_monthly_summary(filtered_df)
+    
+    # Display
     numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
-    overall_summary_display = format_with_commas(overall_summary_df, numeric_cols)
+    display_df = format_with_commas(monthly_summary_df, numeric_cols)
     
-    # Display the summary
-    st.subheader("Consolidated Overall SMS Summary")
-    st.dataframe(overall_summary_display, use_container_width=True)
+    st.subheader("Monthly SMS Summary")
+    st.dataframe(display_df, use_container_width=True)
     
-    # Create and offer Excel download
-    excel_data = to_excel_single(overall_summary_df, "Consolidated_Overall_Summary")
+    # Download button
+    excel_data = to_excel_single(monthly_summary_df, "Monthly_SMS_Summary")
     st.download_button(
-        label="Download Consolidated Overall Summary",
+        label="Download Monthly Summary",
         data=excel_data,
-        file_name="consolidated_overall_sms_summary.xlsx",
+        file_name=f"monthly_sms_summary_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+    
+    # Show some basic stats
+    with st.expander("Quick Statistics"):
+        total_sms = monthly_summary_df['SMS SENDING'].sum()
+        total_delivered = monthly_summary_df['DELIVERED'].sum()
+        total_failed = monthly_summary_df['FAILED'].sum()
+        delivery_rate = (total_delivered / total_sms * 100) if total_sms > 0 else 0
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total SMS", f"{total_sms:,}")
+        col2.metric("Delivery Rate", f"{delivery_rate:.1f}%")
+        col3.metric("Failed SMS", f"{total_failed:,}")
 else:
-    st.info("Please upload one or more Daily_SMS_Summary Excel files to begin.")
+    st.info("Please upload Daily_SMS_Summary Excel files to begin.")
