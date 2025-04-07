@@ -2,13 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-# Page configuration
-st.set_page_config(
-    layout="wide",
-    page_title="DAILY SMS SUMMARY CONSOLIDATOR",
-    page_icon="📊",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(layout="wide", page_title="DIALER PRODUCTIVITY PER CRITERIA OF BALANCE", page_icon="📊", initial_sidebar_state="expanded")
 
 # Apply dark mode and custom styling
 st.markdown(
@@ -32,25 +26,25 @@ st.markdown(
         width: 100% !important;
         font-size: 14px;
     }
+    .stExpander {
+        width: 100%;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# Title
-st.title('DAILY SMS SUMMARY CONSOLIDATOR')
+st.title('SPM SMS MONITORING ALL ENVI')
 
-# Function to load and cache multiple Excel files
 @st.cache_data
-def load_daily_summaries(uploaded_files):
+def load_data(uploaded_files):
     dfs = []
     for file in uploaded_files:
         df = pd.read_excel(file)
-        df.columns = df.columns.str.strip()  # Clean column names
-        dfs.append(df)
+        df.columns = df.columns.str.strip()
+        dfs.append(df)  # Removed 'Source_File' addition
     return pd.concat(dfs, ignore_index=True)
 
-# Function to format numbers with commas for display
 def format_with_commas(df, numeric_cols):
     df_copy = df.copy()
     for col in numeric_cols:
@@ -58,31 +52,23 @@ def format_with_commas(df, numeric_cols):
             df_copy[col] = df_copy[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else x)
     return df_copy
 
-# Function to create Excel file
 def to_excel_single(df, sheet_name):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_copy = df.copy()
-        # Find and format date column
-        date_col = next((col for col in df_copy.columns if 'date' in col.lower()), None)
-        if date_col and date_col in df_copy.columns:
-            if pd.api.types.is_datetime64_any_dtype(df_copy[date_col]):
-                df_copy[date_col] = df_copy[date_col].dt.strftime('%d-%m-%Y')
-            elif pd.api.types.is_object_dtype(df_copy[date_col]):
-                df_copy[date_col] = pd.to_datetime(df_copy[date_col], errors='coerce').dt.strftime('%d-%m-%Y')
-        
+        if 'DATE_RANGE' in df_copy.columns:
+            df_copy['DATE_RANGE'] = df_copy['DATE_RANGE'].astype(str)
+        elif 'DATE' in df_copy.columns:
+            if pd.api.types.is_datetime64_any_dtype(df_copy['DATE']):
+                df_copy['DATE'] = df_copy['DATE'].dt.strftime('%d-%m-%Y')
+            elif pd.api.types.is_object_dtype(df_copy['DATE']):
+                df_copy['DATE'] = pd.to_datetime(df_copy['DATE'], errors='coerce').dt.strftime('%d-%m-%Y')
         df_copy.to_excel(writer, index=False, sheet_name=sheet_name)
         
         workbook = writer.book
         worksheet = writer.sheets[sheet_name]
         
-        header_format = workbook.add_format({
-            'bold': True,
-            'bg_color': '#87CEEB',
-            'border': 1,
-            'align': 'center',
-            'valign': 'vcenter'
-        })
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#87CEEB', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
         cell_format = workbook.add_format({'border': 1, 'num_format': '#,##0'})
         text_format = workbook.add_format({'border': 1})
         
@@ -102,80 +88,183 @@ def to_excel_single(df, sheet_name):
     
     return output.getvalue()
 
-# Function to create overall summary
-def create_overall_summary(df):
-    # Find date column dynamically
-    date_col = next((col for col in df.columns if 'date' in col.lower()), None)
-    if not date_col:
-        st.error("No date column found in the uploaded files. Expected a column with 'date' in its name.")
-        st.write("Available columns:", list(df.columns))
-        return None
+def to_excel_multiple(dfs_dict):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#87CEEB', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+        cell_format = workbook.add_format({'border': 1, 'num_format': '#,##0'})
+        text_format = workbook.add_format({'border': 1})
+        
+        for sheet_name, df in dfs_dict.items():
+            df_copy = df.copy()
+            if 'DATE_RANGE' in df_copy.columns:
+                df_copy['DATE_RANGE'] = df_copy['DATE_RANGE'].astype(str)
+            elif 'DATE' in df_copy.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_copy['DATE']):
+                    df_copy['DATE'] = df_copy['DATE'].dt.strftime('%d-%m-%Y')
+                elif pd.api.types.is_object_dtype(df_copy['DATE']):
+                    df_copy['DATE'] = pd.to_datetime(df_copy['DATE'], errors='coerce').dt.strftime('%d-%m-%Y')
+            
+            df_copy.to_excel(writer, index=False, sheet_name=sheet_name)
+            worksheet = writer.sheets[sheet_name]
+            
+            for col_num, value in enumerate(df_copy.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            
+            numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
+            for row_num in range(1, len(df_copy) + 1):
+                for col_num, col_name in enumerate(df_copy.columns):
+                    value = df_copy.iloc[row_num-1, col_num]
+                    format_to_use = cell_format if col_name in numeric_cols else text_format
+                    worksheet.write(row_num, col_num, value, format_to_use)
+            
+            for i, col in enumerate(df_copy.columns):
+                max_length = max(df_copy[col].astype(str).map(len).max(), len(str(col)))
+                worksheet.set_column(i, i, max_length + 2)
     
-    # Convert to datetime
-    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+    return output.getvalue()
+
+def create_sms_summaries(df):
+    required_columns = {
+        'date_col': 'SMS Status Response Date/Time',
+        'env_col': 'Environment',
+        'client_col': 'Client',
+        'status_col': 'Status',
+        'submission_date_col': 'Submission Date / Time',
+        'phone_col': 'Phone Number'
+    }
     
-    # Get date range
-    valid_dates = df[date_col].dropna()
+    available_cols = [col.strip().lower() for col in df.columns]
+    missing_cols = []
+    col_mapping = {}
+    
+    for key, expected_col in required_columns.items():
+        found = False
+        for actual_col in available_cols:
+            if actual_col == expected_col.lower().strip():
+                col_mapping[key] = next(col for col in df.columns if col.strip().lower() == actual_col)
+                found = True
+                break
+        if not found:
+            missing_cols.append(expected_col)
+    
+    if missing_cols:
+        st.error(f"The following required columns are missing from your data: {', '.join(missing_cols)}")
+        st.write("Available columns in your data:", list(df.columns))
+        return None, None
+    
+    df_processed = df.copy()
+    df_processed = df_processed.rename(columns={
+        col_mapping['date_col']: 'DATE',
+        col_mapping['env_col']: 'ENVIRONMENT',
+        col_mapping['client_col']: 'CLIENT',
+        col_mapping['status_col']: 'STATUS',
+        col_mapping['submission_date_col']: 'SUBMISSION_DATE',
+        col_mapping['phone_col']: 'PHONE'
+    })
+    
+    # Replace blank or missing CLIENT values with "SYSTEM"
+    df_processed['CLIENT'] = df_processed['CLIENT'].replace('', 'SYSTEM').fillna('SYSTEM')
+    
+    # Extract only date with robust handling
+    try:
+        df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    except Exception as e:
+        st.warning(f"Error converting 'SMS Status Response Date/Time': {str(e)}")
+        df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], errors='coerce').dt.date
+    
+    try:
+        df_processed['SUBMISSION_DATE'] = pd.to_datetime(df_processed['SUBMISSION_DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    except Exception as e:
+        st.warning(f"Error converting 'Submission Date / Time': {str(e)}")
+        df_processed['SUBMISSION_DATE'] = pd.to_datetime(df_processed['SUBMISSION_DATE'], errors='coerce').dt.date
+    
+    # Daily summary without Source_File
+    daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT']).apply(
+        lambda x: pd.Series({
+            'SMS SENDING': x['ENVIRONMENT'].notna().sum(),
+            'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),
+            'FAILED': (x['STATUS'].str.lower() == 'failed').sum()
+        })
+    ).reset_index()
+    daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
+    
+    # Check if we have valid dates before calculating min/max
+    valid_dates = df_processed['DATE'].dropna()
     if len(valid_dates) == 0:
-        st.error(f"No valid dates found in the '{date_col}' column")
-        st.write("Sample values:", df[date_col].head().tolist())
+        st.error("No valid dates found in 'SMS Status Response Date/Time' column")
+        st.write("Sample of raw date values:", df_processed['DATE'].head().tolist())
         date_range_str = "Invalid Date Range"
     else:
         min_date = valid_dates.min()
         max_date = valid_dates.max()
         date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
-    # Check for required columns
-    required_cols = ['ENVIRONMENT', 'CLIENT', 'SMS SENDING', 'DELIVERED', 'FAILED']
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        st.error(f"Missing required columns: {', '.join(missing_cols)}")
-        st.write("Available columns:", list(df.columns))
-        return None
-    
-    # Create overall summary
-    overall_summary = df.groupby(['ENVIRONMENT', 'CLIENT']).agg({
-        'SMS SENDING': 'sum',
-        'DELIVERED': 'sum',
-        'FAILED': 'sum'
-    }).reset_index()
-    
+    # Overall summary without Source_File
+    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT']).apply(
+        lambda x: pd.Series({
+            'SMS SENDING': x['ENVIRONMENT'].notna().sum(),
+            'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),
+            'FAILED': (x['STATUS'].str.lower() == 'failed').sum()
+        })
+    ).reset_index()
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
-    return overall_summary
+    overall_summary = overall_summary.sort_values(['CLIENT'])
+    
+    return daily_summary, overall_summary
 
-# Sidebar file uploader
 with st.sidebar:
-    st.subheader("Upload Daily Summary Files")
+    st.subheader("Upload Files")
     uploaded_files = st.file_uploader(
-        "Choose Daily Summary Excel files",
+        "Choose Excel files",
         type=['xlsx'],
         accept_multiple_files=True,
-        help="Select multiple Daily_SMS_Summary files to consolidate"
+        help="Select any number of Excel files to process"
     )
 
-# Main content
 if uploaded_files:
-    try:
-        combined_df = load_daily_summaries(uploaded_files)
+    df = load_data(uploaded_files)
+    
+    daily_summary_df, overall_summary_df = create_sms_summaries(df)
+    
+    if daily_summary_df is not None and overall_summary_df is not None:
+        numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
         
-        overall_summary_df = create_overall_summary(combined_df)
+        daily_summary_display = format_with_commas(daily_summary_df, numeric_cols)
+        overall_summary_display = format_with_commas(overall_summary_df, numeric_cols)
         
-        if overall_summary_df is not None:
-            numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
-            overall_summary_display = format_with_commas(overall_summary_df, numeric_cols)
-            
-            st.subheader("Consolidated Overall SMS Summary")
-            st.dataframe(overall_summary_display, use_container_width=True)
-            
-            excel_data = to_excel_single(overall_summary_df, "Consolidated_Overall_Summary")
-            st.download_button(
-                label="Download Consolidated Overall Summary",
-                data=excel_data,
-                file_name="consolidated_overall_sms_summary.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-    except Exception as e:
-        st.error(f"An error occurred while processing the files: {str(e)}")
-        st.write("Please check your input files and try again.")
-else:
-    st.info("Please upload one or more Daily_SMS_Summary Excel files to begin.")
+        st.subheader("Overall SMS Summary")
+        st.dataframe(overall_summary_display, use_container_width=True)
+        
+        overall_excel_data = to_excel_single(overall_summary_df, "Overall_SMS_Summary")
+        st.download_button(
+            label="Download Overall SMS Summary",
+            data=overall_excel_data,
+            file_name="overall_sms_summary.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        st.subheader("SMS Summary per Client per Day")
+        st.dataframe(daily_summary_display, use_container_width=True)
+        
+        daily_excel_data = to_excel_single(daily_summary_df, "Daily_SMS_Summary")
+        st.download_button(
+            label="Download Daily SMS Summary",
+            data=daily_excel_data,
+            file_name="daily_sms_summary_per_client_per_day.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        all_data_dict = {
+            "Overall_Summary": overall_summary_df,
+            "Daily_Summary": daily_summary_df
+        }
+        all_excel_data = to_excel_multiple(all_data_dict)
+        st.download_button(
+            label="Download All Summaries",
+            data=all_excel_data,
+            file_name="all_sms_summaries.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
