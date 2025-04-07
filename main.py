@@ -166,7 +166,10 @@ def create_sms_summaries(df):
         col_mapping['phone_col']: 'PHONE'
     })
     
-    # Extract only date with more robust handling
+    # Replace blank or missing CLIENT values with "SYSTEM"
+    df_processed['CLIENT'] = df_processed['CLIENT'].replace('', 'SYSTEM').fillna('SYSTEM')
+    
+    # Extract only date with robust handling
     try:
         df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
     except Exception as e:
