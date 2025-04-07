@@ -35,7 +35,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-@st.cache_data(show_exceptions=True)
+# Use basic @st.cache_data without parameters for broader compatibility
+@st.cache_data
 def load_data(uploaded_files):
     if not uploaded_files:
         st.warning("Please upload at least one Excel file.")
@@ -141,7 +142,7 @@ def to_excel_multiple(dfs_dict):
         st.error(f"Error generating multiple Excel files: {str(e)}")
         return None
 
-@st.cache_data(show_exceptions=True)
+@st.cache_data
 def create_sms_summaries(df):
     if df.empty:
         st.warning("No data available to process.")
