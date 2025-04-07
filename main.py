@@ -130,11 +130,9 @@ def to_excel_multiple(dfs_dict):
 def create_sms_summaries(df):
     # Updated required columns to match your dataset
     required_columns = {
-        'date_col': 'SMS Status Response Date/Time',  # Correct column for date
-        'env_col': 'Environment',  # Not present in your screenshot, assuming it exists or needs adjustment
+        'date_col': 'SMS Status Response Date/Time',  # Matches your dataset
         'client_col': 'Client',
-        'status_col': 'SMS STATUS',  # Correct column for status
-        'phone_col': 'Phone Number'  # Not present in your screenshot, assuming it exists or needs adjustment
+        'status_col': 'SMS Status',  # Corrected to match the exact column name in your dataset
     }
     
     available_cols = [col.strip() for col in df.columns]
@@ -160,10 +158,8 @@ def create_sms_summaries(df):
     df_processed = df.copy()
     df_processed = df_processed.rename(columns={
         col_mapping['date_col']: 'DATE',
-        col_mapping['env_col']: 'ENVIRONMENT',
         col_mapping['client_col']: 'CLIENT',
         col_mapping['status_col']: 'STATUS',
-        col_mapping['phone_col']: 'PHONE'
     })
     
     # Parse the date with the correct format (e.g., '08-03-2025 12:27:58')
@@ -173,16 +169,17 @@ def create_sms_summaries(df):
     if df_processed['DATE'].isnull().any():
         st.warning("Some dates could not be parsed correctly. Please ensure the 'SMS Status Response Date/Time' column follows the format 'DD-MM-YYYY HH:MM:SS'.")
     
-    # Group by DATE, ENVIRONMENT, CLIENT, and Source_File to calculate SMS sending, delivered, and failed counts
-    daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
-        'PHONE': 'count',  # Total SMS sent (assuming PHONE indicates an SMS attempt)
+    # Group by DATE, CLIENT, and Source_File to calculate SMS sending, delivered, and failed counts
+    # Since 'Phone Number' isn't available, we'll count rows as SMS attempts
+    daily_summary = df_processed.groupby(['DATE', 'CLIENT', 'Source_File']).agg({
         'STATUS': [
+            lambda x: len(x),  # Total SMS attempts (each row is an SMS)
             lambda x: (x.str.contains('DELIVERED', case=False, na=False)).sum(),  # Count of delivered SMS
             lambda x: (x.str.contains('FAILED', case=False, na=False)).sum()  # Count of failed SMS
         ]
     }).reset_index()
     
-    daily_summary.columns = ['DATE', 'ENVIRONMENT', 'CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
+    daily_summary.columns = ['DATE', 'CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
     # Calculate date range for the overall summary
@@ -191,15 +188,15 @@ def create_sms_summaries(df):
     date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}" if min_date and max_date else "Unknown Date Range"
     
     # Overall summary without DATE
-    overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT', 'Source_File']).agg({
-        'PHONE': 'count',
+    overall_summary = df_processed.groupby(['CLIENT', 'Source_File']).agg({
         'STATUS': [
+            lambda x: len(x),  # Total SMS attempts
             lambda x: (x.str.contains('DELIVERED', case=False, na=False)).sum(),
             lambda x: (x.str.contains('FAILED', case=False, na=False)).sum()
         ]
     }).reset_index()
     
-    overall_summary.columns = ['ENVIRONMENT', 'CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
+    overall_summary.columns = ['CLIENT', 'SOURCE_FILE', 'SMS SENDING', 'DELIVERED', 'FAILED']
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
     overall_summary = overall_summary.sort_values(['CLIENT'])
     
