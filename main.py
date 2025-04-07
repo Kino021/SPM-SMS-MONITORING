@@ -129,10 +129,10 @@ def to_excel_multiple(dfs_dict):
 
 def create_sms_summaries(df):
     required_columns = {
-        'date_col': 'Submission Date / Time',
+        'date_col': 'SMS Status Response Date/Time',
         'env_col': 'Environment',
         'client_col': 'Client',
-        'status_col': 'Submission Date / Time',
+        'status_col': 'Status',
         'phone_col': 'Phone Number'
     }
     
@@ -157,7 +157,7 @@ def create_sms_summaries(df):
     
     df_processed = df.copy()
     df_processed = df_processed.rename(columns={
-        col_mapping['date_col']: 'DATE',
+        col_mapping['date_col']: 'SMS Status Response Date/Time',
         col_mapping['env_col']: 'ENVIRONMENT',
         col_mapping['client_col']: 'CLIENT',
         col_mapping['status_col']: 'STATUS',
