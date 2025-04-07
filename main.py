@@ -166,32 +166,46 @@ def create_sms_summaries(df):
         col_mapping['phone_col']: 'PHONE'
     })
     
-    # Extract only date from "SMS Status Response Date/Time" (DATE column)
-    df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    # Extract only date with more robust handling
+    try:
+        df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    except Exception as e:
+        st.warning(f"Error converting 'SMS Status Response Date/Time': {str(e)}")
+        df_processed['DATE'] = pd.to_datetime(df_processed['DATE'], errors='coerce').dt.date
     
-    # For Failed status, use Submission Date / Time
-    df_processed['SUBMISSION_DATE'] = pd.to_datetime(df_processed['SUBMISSION_DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    try:
+        df_processed['SUBMISSION_DATE'] = pd.to_datetime(df_processed['SUBMISSION_DATE'], format='%d-%m-%Y %H:%M:%S', errors='coerce').dt.date
+    except Exception as e:
+        st.warning(f"Error converting 'Submission Date / Time': {str(e)}")
+        df_processed['SUBMISSION_DATE'] = pd.to_datetime(df_processed['SUBMISSION_DATE'], errors='coerce').dt.date
     
     # Daily summary with modified logic
     daily_summary = df_processed.groupby(['DATE', 'ENVIRONMENT', 'CLIENT', 'Source_File']).apply(
         lambda x: pd.Series({
-            'SMS SENDING': x['ENVIRONMENT'].notna().sum(),  # Count non-empty Environment values
-            'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),  # Count only "delivered" in Status
-            'FAILED': (x['STATUS'].str.lower() == 'failed').sum()  # Count only "failed" in Status
+            'SMS SENDING': x['ENVIRONMENT'].notna().sum(),
+            'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),
+            'FAILED': (x['STATUS'].str.lower() == 'failed').sum()
         })
     ).reset_index()
     daily_summary = daily_summary.sort_values(['DATE', 'CLIENT'])
     
-    min_date = df_processed['DATE'].min()
-    max_date = df_processed['DATE'].max()
-    date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
+    # Check if we have valid dates before calculating min/max
+    valid_dates = df_processed['DATE'].dropna()
+    if len(valid_dates) == 0:
+        st.error("No valid dates found in 'SMS Status Response Date/Time' column")
+        st.write("Sample of raw date values:", df_processed['DATE'].head().tolist())
+        date_range_str = "Invalid Date Range"
+    else:
+        min_date = valid_dates.min()
+        max_date = valid_dates.max()
+        date_range_str = f"{min_date.strftime('%B %d')} - {max_date.strftime('%B %d, %Y')}"
     
     # Overall summary with modified logic
     overall_summary = df_processed.groupby(['ENVIRONMENT', 'CLIENT', 'Source_File']).apply(
         lambda x: pd.Series({
-            'SMS SENDING': x['ENVIRONMENT'].notna().sum(),  # Count non-empty Environment values
-            'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),  # Count only "delivered" in Status
-            'FAILED': (x['STATUS'].str.lower() == 'failed').sum()  # Count only "failed" in Status
+            'SMS SENDING': x['ENVIRONMENT'].notna().sum(),
+            'DELIVERED': (x['STATUS'].str.lower() == 'delivered').sum(),
+            'FAILED': (x['STATUS'].str.lower() == 'failed').sum()
         })
     ).reset_index()
     overall_summary.insert(0, 'DATE_RANGE', date_range_str)
