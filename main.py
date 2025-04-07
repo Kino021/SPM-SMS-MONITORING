@@ -37,6 +37,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Title
 st.title('DAILY SMS SUMMARY CONSOLIDATOR')
 
 # Function to load and cache multiple Excel files
@@ -62,9 +63,9 @@ def to_excel_single(df, sheet_name):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_copy = df.copy()
-        # Check for date-like column and format
+        # Find and format date column
         date_col = next((col for col in df_copy.columns if 'date' in col.lower()), None)
-        if date_col:
+        if date_col and date_col in df_copy.columns:
             if pd.api.types.is_datetime64_any_dtype(df_copy[date_col]):
                 df_copy[date_col] = df_copy[date_col].dt.strftime('%d-%m-%Y')
             elif pd.api.types.is_object_dtype(df_copy[date_col]):
@@ -116,7 +117,8 @@ def create_overall_summary(df):
     # Get date range
     valid_dates = df[date_col].dropna()
     if len(valid_dates) == 0:
-        st.error("No valid dates found in the date column")
+        st.error(f"No valid dates found in the '{date_col}' column")
+        st.write("Sample values:", df[date_col].head().tolist())
         date_range_str = "Invalid Date Range"
     else:
         min_date = valid_dates.min()
@@ -153,23 +155,27 @@ with st.sidebar:
 
 # Main content
 if uploaded_files:
-    combined_df = load_daily_summaries(uploaded_files)
-    
-    overall_summary_df = create_overall_summary(combined_df)
-    
-    if overall_summary_df is not None:
-        numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
-        overall_summary_display = format_with_commas(overall_summary_df, numeric_cols)
+    try:
+        combined_df = load_daily_summaries(uploaded_files)
         
-        st.subheader("Consolidated Overall SMS Summary")
-        st.dataframe(overall_summary_display, use_container_width=True)
+        overall_summary_df = create_overall_summary(combined_df)
         
-        excel_data = to_excel_single(overall_summary_df, "Consolidated_Overall_Summary")
-        st.download_button(
-            label="Download Consolidated Overall Summary",
-            data=excel_data,
-            file_name="consolidated_overall_sms_summary.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        if overall_summary_df is not None:
+            numeric_cols = ['SMS SENDING', 'DELIVERED', 'FAILED']
+            overall_summary_display = format_with_commas(overall_summary_df, numeric_cols)
+            
+            st.subheader("Consolidated Overall SMS Summary")
+            st.dataframe(overall_summary_display, use_container_width=True)
+            
+            excel_data = to_excel_single(overall_summary_df, "Consolidated_Overall_Summary")
+            st.download_button(
+                label="Download Consolidated Overall Summary",
+                data=excel_data,
+                file_name="consolidated_overall_sms_summary.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except Exception as e:
+        st.error(f"An error occurred while processing the files: {str(e)}")
+        st.write("Please check your input files and try again.")
 else:
     st.info("Please upload one or more Daily_SMS_Summary Excel files to begin.")
