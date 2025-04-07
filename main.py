@@ -4,7 +4,7 @@ from io import BytesIO
 
 st.set_page_config(layout="wide", page_title="DIALER PRODUCTIVITY PER CRITERIA OF BALANCE", page_icon="📊", initial_sidebar_state="expanded")
 
-# Apply dark mode and custom styling
+# Apply dark mode and custom styling (unchanged)
 st.markdown(
     """
     <style>
@@ -129,7 +129,7 @@ def to_excel_multiple(dfs_dict):
 
 def create_sms_summaries(df):
     required_columns = {
-        'date_col': 'Submission Date / Time',
+        'date_col': 'SMS Status Response Date/Time',  # Changed from 'Submission Date / Time'
         'env_col': 'Environment',
         'client_col': 'Client',
         'status_col': 'SMS Status Response Date/Time',
