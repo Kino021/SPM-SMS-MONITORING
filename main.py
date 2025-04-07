@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(layout="wide", page_title="DIALER PRODUCTIVITY PER CRITERIA OF BALANCE", page_icon="📊", initial_sidebar_state="expanded")
+st.set_page_config(layout="wide", page_title="SPM SMS MONITORING", page_icon="📊", initial_sidebar_state="expanded")
 
 # Apply dark mode and custom styling (unchanged)
 st.markdown(
